@@ -1,0 +1,65 @@
+***Ran this script for 2-2-2026***
+the Updated extract with the filter conditions
+**updated** 9/24 with eCourts Data validation from Kristi's team
+
+SELECT GG.GRDSHP_CASE_ID,
+                             GG.GRDSHP_COUNTY ,                           
+                             GG.GRDSHP_COUNTY_DOCKET_NUMBER,
+                             gg.GRDSHP_CASE_STATUS_CD ,
+                             GG.GRDSHP_CASE_CLOSED_DATE as "Case Closed Date",
+                             gj.JDGMNT_DATE ,
+                             GRGP.PARTY_ID,
+                             GP.PARTY_FIRST_NAME,
+                             GP.PARTY_LAST_NAME,
+                             GP.PARTY_MIDDLE_NAME,
+                             GRGP.REL_PARTY_STATUS_REASON,
+                             GRGP.REL_PARTY_STATUS ,
+                             GRGP.REL_PARTY_TYPE,
+                             GRGP.REL_TERMINATION_REASON,
+                             grgp.REL_MAINT_DATETIME as "Rel Maint Timestamp"
+FROM
+  dbo.GMS_RELATIONSHIP_GRDSHP_PARTY GRGP
+  LEFT JOIN dbo.GMS_GUARDIANSHIP GG
+    ON GRGP.GRDSHP_CASE_ID = GG.GRDSHP_CASE_ID
+    LEFT JOIN dbo.GMS_JUDGEMENT gj
+    on GRGP.GRDSHP_CASE_ID = gj.GRDSHP_CASE_ID
+  INNER JOIN dbo.GMS_PARTY GP
+    ON GRGP.PARTY_ID = GP.PARTY_ID
+WHERE GRGP.REL_PARTY_TYPE IN ('GRD')
+      AND GRGP.REL_PARTY_STATUS IN ('INA')
+     AND GRGP.REL_PARTY_STATUS_REASON IN ('DIE', 'AIE', 'CBC', 'DIS');
+
+
+**Updated** 9/9/24
+SELECT  
+    rp.grdshp_jdgmnt_key, 
+    rp.grdshp_case_key, 
+    rp.grdshp_party_key,
+    rp.rel_party_type_code,
+    rp.rel_party_status_code,
+    rp.rel_qualification_date,
+    rp.rel_termination_reason_text,
+    gd.grdshp_jdgmnt_key, 
+    gd.grdshp_case_key, 
+    gd.grdshp_county_desc, 
+    gd.grdshp_county_docket_id, 
+    gd.grdshp_case_status_code,
+    jdgmnt_date::date as trimmed_jdgmnt_date,
+    gm.grdshp_case_key,
+    gm.grdshp_case_closed_timestamp::date as trimmed_case_closed_date 
+FROM 
+    dm_civil_db.gms_relationship_grdshp_party_dim rp
+INNER JOIN 
+    dm_civil_db.gms_guardianship_judgement_dim gd
+ON 
+    rp.grdshp_jdgmnt_key = gd.grdshp_jdgmnt_key
+AND 
+    rp.grdshp_case_key = gd.grdshp_case_key    
+inner join 
+	dw_civil_db.gms_guardianship_dim gm
+on
+	rp.grdshp_case_key = gm.grdshp_case_key 
+WHERE 
+	rp.rel_party_type_code = 'GRD'
+AND 
+	rp.rel_party_status_code = 'INA';

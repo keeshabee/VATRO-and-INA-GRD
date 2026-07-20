@@ -1,0 +1,121 @@
+Sub PopulateGeneralTROReport()
+    Dim wsTable As Worksheet, wsData As Worksheet
+    Dim runDate As String, runDateFormatted As String, sheetName As String
+    Dim counties As Variant, county As Variant
+    Dim currentRow As Long, dataDict As Object
+    Dim dataRow As Long, lastDataRow As Long
+    Dim countyName As String, yearGroup As String, totalCount As Long
+    Dim yearColumns As Object, stateTotals As Object, year As Variant
+    Dim col As Long, lastCountyRow As Long
+
+    Set wsTable = ThisWorkbook.Sheets("General_Table_1")
+    runDate = InputBox("Enter the run date (MM/DD/YYYY):", "Run Date", "07/14/2026")
+    If runDate = "" Then Exit Sub
+    runDateFormatted = Format(CDate(runDate), "mmmm dd, yyyy")
+
+    Select Case runDate
+        Case "07/14/2026": sheetName = "GEN_July_2026"
+        Case Else
+            MsgBox "No sheet mapped for that date yet. Add a Case line for it.", vbExclamation
+            Exit Sub
+    End Select
+
+    On Error Resume Next
+    Set wsData = ThisWorkbook.Sheets(sheetName)
+    On Error GoTo 0
+    If wsData Is Nothing Then
+        MsgBox "Sheet '" & sheetName & "' not found.", vbExclamation
+        Exit Sub
+    End If
+
+    counties = Array("Atlantic", "Bergen", "Burlington", "Camden", "Cape May", "Cumberland", _
+                     "Essex", "Gloucester", "Hunterdon", "Hudson", "Mercer", "Middlesex", _
+                     "Monmouth", "Morris", "Ocean", "Passaic", "Salem", "Somerset", _
+                     "Sussex", "Union", "Warren")
+
+    Set yearColumns = CreateObject("Scripting.Dictionary")
+    yearColumns.Add "2026", 3: yearColumns.Add "2025", 4: yearColumns.Add "2024", 5
+    yearColumns.Add "2023", 6: yearColumns.Add "2022", 7: yearColumns.Add "2021", 8
+    yearColumns.Add "2020", 9: yearColumns.Add "2019", 10: yearColumns.Add "2018", 11
+    yearColumns.Add "2017 & Older", 12
+
+    Set dataDict = CreateObject("Scripting.Dictionary")
+    lastDataRow = wsData.Cells(wsData.Rows.Count, 1).End(xlUp).Row
+    For dataRow = 2 To lastDataRow
+        countyName = wsData.Cells(dataRow, 1).Value
+        yearGroup = CStr(wsData.Cells(dataRow, 2).Value)
+        totalCount = wsData.Cells(dataRow, 3).Value
+        If countyName <> "" Then
+            dataDict(countyName & "|" & yearGroup) = totalCount
+        End If
+    Next dataRow
+
+    Set stateTotals = CreateObject("Scripting.Dictionary")
+    For Each year In yearColumns.Keys: stateTotals(year) = 0: Next year
+
+    currentRow = 5
+    For Each county In counties
+        Do While currentRow <= wsTable.Cells(wsTable.Rows.Count, 1).End(xlUp).Row + 1
+            If wsTable.Cells(currentRow, 1).Value = county Then
+                lastCountyRow = currentRow
+                Do While lastCountyRow < wsTable.Cells(wsTable.Rows.Count, 1).End(xlUp).Row
+                    If wsTable.Cells(lastCountyRow + 1, 1).Value <> "" And wsTable.Cells(lastCountyRow + 1, 1).Value <> county Then
+                        Exit Do
+                    ElseIf wsTable.Cells(lastCountyRow + 1, 2).Value <> "" Then
+                        lastCountyRow = lastCountyRow + 1
+                    Else
+                        Exit Do
+                    End If
+                Loop
+                wsTable.Rows(lastCountyRow + 1).Insert Shift:=xlDown
+                wsTable.Cells(lastCountyRow + 1, 2).Value = runDateFormatted
+
+                For Each year In yearColumns.Keys
+                    col = yearColumns(year)
+                    If dataDict.exists(county & "|" & year) Then
+                        totalCount = dataDict(county & "|" & year)
+                        wsTable.Cells(lastCountyRow + 1, col).Value = totalCount
+                        wsTable.Cells(lastCountyRow + 1, col).Interior.ColorIndex = xlNone
+                        stateTotals(year) = stateTotals(year) + totalCount
+                    Else
+                        wsTable.Cells(lastCountyRow + 1, col).Value = ""
+                        wsTable.Cells(lastCountyRow + 1, col).Interior.Color = RGB(217, 217, 217)
+                    End If
+                Next year
+
+                currentRow = lastCountyRow + 2
+                Exit Do
+            End If
+            currentRow = currentRow + 1
+        Loop
+    Next county
+
+    Dim stateRow As Long, lastStateRow As Long
+    For stateRow = 5 To wsTable.Cells(wsTable.Rows.Count, 1).End(xlUp).Row + 1
+        If wsTable.Cells(stateRow, 1).Value = "State" Then
+            lastStateRow = stateRow
+            Do While lastStateRow < wsTable.Cells(wsTable.Rows.Count, 1).End(xlUp).Row
+                If wsTable.Cells(lastStateRow + 1, 2).Value <> "" Then
+                    lastStateRow = lastStateRow + 1
+                Else
+                    Exit Do
+                End If
+            Loop
+            wsTable.Rows(lastStateRow + 1).Insert Shift:=xlDown
+            wsTable.Cells(lastStateRow + 1, 2).Value = runDateFormatted
+            For Each year In yearColumns.Keys
+                col = yearColumns(year)
+                If stateTotals(year) > 0 Then
+                    wsTable.Cells(lastStateRow + 1, col).Value = stateTotals(year)
+                    wsTable.Cells(lastStateRow + 1, col).Interior.ColorIndex = xlNone
+                Else
+                    wsTable.Cells(lastStateRow + 1, col).Value = ""
+                    wsTable.Cells(lastStateRow + 1, col).Interior.Color = RGB(217, 217, 217)
+                End If
+            Next year
+            Exit For
+        End If
+    Next stateRow
+
+    MsgBox "General data populated for " & runDateFormatted & "!", vbInformation
+End Sub

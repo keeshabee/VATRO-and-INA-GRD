@@ -107,3 +107,63 @@ Sub PopulateVATROReport()
 
     MsgBox "VA data populated for " & runDateFormatted & "!", vbInformation
 End Sub
+
+
+
+
+
+let
+    FolderPath = "V:\Family\TRO Not Served Reports - Biannual Runs\2026_July_Run",
+    Source = Folder.Files(FolderPath),
+    FilterXlsx = Table.SelectRows(Source, each Text.EndsWith([Extension], ".xlsx") and not Text.StartsWith([Name], "~$")),
+    AddCounty = Table.AddColumn(FilterXlsx, "County", each Text.BetweenDelimiters([Name], "_", "_", 2, 0)),
+    AddWorkbook = Table.AddColumn(AddCounty, "Workbook", each Excel.Workbook([Content], false)),
+    SelectCols = Table.SelectColumns(AddWorkbook, {"County", "Workbook"}),
+    ExpandSheets = Table.ExpandTableColumn(SelectCols, "Workbook", {"Name", "Data"}, {"SheetName", "Data"}),
+    FilterVA = Table.SelectRows(ExpandSheets, each [SheetName] = "VA"),
+
+    ExtractRecords = (tbl as table) as table =>
+        let
+            col1 = Table.Column(tbl, "Column1"),
+            headerRowIndex = List.PositionOf(col1, "Docket_Number"),
+            trimmed = Table.PromoteHeaders(Table.Skip(tbl, headerRowIndex), [PromoteAllScalars = true]),
+            onlyRecords = Table.SelectRows(trimmed, each Text.StartsWith(Text.From([Docket_Number]), "FV~"))
+        in
+            onlyRecords,
+
+    AddClean = Table.AddColumn(FilterVA, "Clean", each ExtractRecords([Data])),
+    ExpandClean = Table.ExpandTableColumn(AddClean, "Clean", {"Docket_Number", "TRO_Issue_Date"}),
+    AddYear = Table.AddColumn(ExpandClean, "Year", each try Date.Year(Date.From([TRO_Issue_Date])) otherwise null),
+    FilterValidYear = Table.SelectRows(AddYear, each [Year] <> null),
+    AddYearGroup = Table.AddColumn(FilterValidYear, "YearGroup", each if [Year] <= 2017 then "2017 & Older" else Text.From([Year])),
+    RemoveExtra = Table.SelectColumns(AddYearGroup, {"County", "YearGroup"}),
+    Grouped = Table.Group(RemoveExtra, {"County", "YearGroup"}, {{"TotalCount", each Table.RowCount(_), Int64.Type}}),
+    AddCountyName = Table.AddColumn(Grouped, "CountyName", each 
+        if [County] = "ATL" then "Atlantic"
+        else if [County] = "BER" then "Bergen"
+        else if [County] = "BUR" then "Burlington"
+        else if [County] = "CAM" then "Camden"
+        else if [County] = "CPM" then "Cape May"
+        else if [County] = "CUM" then "Cumberland"
+        else if [County] = "ESX" then "Essex"
+        else if [County] = "GLO" then "Gloucester"
+        else if [County] = "HNT" then "Hunterdon"
+        else if [County] = "HUD" then "Hudson"
+        else if [County] = "MER" then "Mercer"
+        else if [County] = "MID" then "Middlesex"
+        else if [County] = "MON" then "Monmouth"
+        else if [County] = "MRS" then "Morris"
+        else if [County] = "OCN" then "Ocean"
+        else if [County] = "PAS" then "Passaic"
+        else if [County] = "SLM" then "Salem"
+        else if [County] = "SOM" then "Somerset"
+        else if [County] = "SSX" then "Sussex"
+        else if [County] = "UNN" then "Union"
+        else if [County] = "WRN" then "Warren"
+        else [County]),
+    RemoveOldCounty = Table.RemoveColumns(AddCountyName, {"County"}),
+    RenameCounty = Table.RenameColumns(RemoveOldCounty, {{"CountyName", "County"}}),
+    Reordered = Table.ReorderColumns(RenameCounty, {"County", "YearGroup", "TotalCount"}),
+    SortedRows = Table.Sort(Reordered, {{"County", Order.Ascending}, {"YearGroup", Order.Descending}})
+in
+    SortedRows
